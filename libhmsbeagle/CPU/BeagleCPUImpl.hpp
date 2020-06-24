@@ -430,7 +430,7 @@ int BeagleCPUImpl<BEAGLE_CPU_GENERIC>::createInstance(int tipCount,
 
 //    cLikelihoodTmp = (REALTYPE*) mallocAligned(sizeof(REALTYPE) * kPatternCount * kCategoryCount);
     grandDenominatorDerivTmp = (REALTYPE*) mallocAligned(sizeof(REALTYPE) * kPaddedPatternCount); // TODO Deprecate in favor of integrationTmp
-    grandNumeratorDerivTmp = (REALTYPE*) mallocAligned(sizeof(REALTYPE) * kPaddedPatternCount);
+    grandNumeratorDerivTmp = (REALTYPE*) mallocAligned(sizeof(REALTYPE) * kPaddedPatternCount*kCategoryCount);
 //    grandNumeratorLowerBoundDerivTmp = (REALTYPE*) mallocAligned(sizeof(REALTYPE) * kPatternCount);
 //    grandNumeratorUpperBoundDerivTmp = (REALTYPE*) mallocAligned(sizeof(REALTYPE) * kPatternCount);
 
@@ -1857,11 +1857,11 @@ int BeagleCPUImpl<BEAGLE_CPU_GENERIC>::calcEdgeLogDerivatives(const int *postBuf
 
         const int patternOffset = nodeNum * kPatternCount;
         double* outDerivativesForNode = (outDerivatives == NULL) ?
-                NULL : outDerivatives + patternOffset;
+                NULL : outDerivatives + patternOffset*kCategoryCount;
         double* outSumDerivativesForNode = (outSumDerivatives == NULL) ?
-                NULL : outSumDerivatives + nodeNum;
+                NULL : outSumDerivatives + nodeNum*kCategoryCount;
         double* outSumSquaredDerivativesForNode = (outSumSquaredDerivatives == NULL) ?
-                NULL : outSumSquaredDerivatives + nodeNum;
+                NULL : outSumSquaredDerivatives + nodeNum*kCategoryCount;
 
         resetDerivativeTemporaries();
 
@@ -1884,10 +1884,37 @@ int BeagleCPUImpl<BEAGLE_CPU_GENERIC>::calcEdgeLogDerivatives(const int *postBuf
                                        outSumSquaredDerivativesForNode);
         }
 
-        accumulateDerivatives(outDerivativesForNode,
-                outSumDerivativesForNode,
-                outSumSquaredDerivativesForNode);
+//        accumulateDerivatives(outDerivativesForNode,
+//                outSumDerivativesForNode,
+//                outSumSquaredDerivativesForNode);
+		if(outSumDerivativesForNode != NULL || outSumSquaredDerivativesForNode != NULL){
+			for (int c = 0; c < kCategoryCount; c++){
+				REALTYPE sum = 0;
+				REALTYPE sumSquared = 0;
+				for (int k = 0; k < kPatternCount; k++) {
+					REALTYPE derivative = grandNumeratorDerivTmp[c*kPatternCount+k]/grandDenominatorDerivTmp[k];
+					sum += derivative * gPatternWeights[k];
+					sumSquared += derivative * derivative * gPatternWeights[k];
+				}
+				if(outSumDerivativesForNode != NULL){
+					outSumDerivativesForNode[c] = sum;
+				}
+				if(outSumSquaredDerivativesForNode != NULL){
+					outSumSquaredDerivativesForNode[c] = sumSquared;
+				}
+			}
+		}
 
+		if(outDerivativesForNode != NULL){
+			for (int k = 0; k < kPatternCount; k++) {
+				REALTYPE sum = 0;
+				for (int c = 0; c < kCategoryCount; c++){
+					REALTYPE derivative = grandNumeratorDerivTmp[c*kPatternCount+k]/grandDenominatorDerivTmp[k];
+					sum += derivative;
+				}
+				outDerivativesForNode[k] = sum;
+			}
+		}
     }
 
     return returnCode;
@@ -1956,7 +1983,7 @@ void BeagleCPUImpl<BEAGLE_CPU_GENERIC>::accumulateDerivativesDispatch1(
 
 BEAGLE_CPU_TEMPLATE
 void BeagleCPUImpl<BEAGLE_CPU_GENERIC>::resetDerivativeTemporaries() {
-        std::fill(grandNumeratorDerivTmp, grandNumeratorDerivTmp + kPaddedPatternCount, 0);
+        std::fill(grandNumeratorDerivTmp, grandNumeratorDerivTmp + kPaddedPatternCount*kCategoryCount, 0);
         std::fill(grandDenominatorDerivTmp, grandDenominatorDerivTmp + kPaddedPatternCount, 0);
 }
 
@@ -2002,7 +2029,7 @@ void BeagleCPUImpl<BEAGLE_CPU_GENERIC>::calcEdgeLogDerivativesStates(const int *
                              preOrderPartial[patternIndex * kPartialsPaddedStateCount + k];
             }
 
-            grandNumeratorDerivTmp[pattern] += categoryWeights[category] * numerator;
+            grandNumeratorDerivTmp[patternIndex] += numerator;
             grandDenominatorDerivTmp[pattern] += categoryWeights[category] * denominator;
         }
     }
@@ -2050,7 +2077,7 @@ void BeagleCPUImpl<BEAGLE_CPU_GENERIC>::calcEdgeLogDerivativesPartials(const REA
                 denominator += postOrderPartial[v + k] * preOrderPartial[v + k];
             }
 
-            grandNumeratorDerivTmp[pattern] += weight * numerator;
+            grandNumeratorDerivTmp[patternIndex] = numerator;
             grandDenominatorDerivTmp[pattern] += weight * denominator;
         }
     }

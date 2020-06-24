@@ -710,10 +710,9 @@ void BeagleCPU4StateSSEImpl<BEAGLE_CPU_4_SSE_DOUBLE>::calcEdgeLogDerivativesPart
             V_Real vdenom = VEC_ADD(tmp_vcl_q01, tmp_vcl_q23);
             vdenom = VEC_ADD(vdenom, VEC_SWAP(vdenom));
 
-            double numer = _mm_cvtsd_f64(vnumer) * wt[l];
             double denon = _mm_cvtsd_f64(vdenom) * wt[l];
 
-            grandNumeratorDerivTmp[k] += numer; // TODO Merge [numer, denom] into single SSE transactions
+            grandNumeratorDerivTmp[l*kPatternCount+k] = _mm_cvtsd_f64(vnumer); // TODO Merge [numer, denom] into single SSE transactions
             grandDenominatorDerivTmp[k] += denon;
 
             v += 4;
@@ -770,7 +769,7 @@ void BeagleCPU4StateSSEImpl<BEAGLE_CPU_4_SSE_DOUBLE>::calcEdgeLogDerivativesStat
             double numer = _mm_cvtsd_f64(vnumer);
             double denom = cl_r[stateChild & 3]; cl_r += 4;
 
-            grandNumeratorDerivTmp[k] += numer * wt[l];
+            grandNumeratorDerivTmp[l*kPatternCount+k] += numer;
             grandDenominatorDerivTmp[k] += denom * wt[l];
         }
         w += OFFSET*4;
